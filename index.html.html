@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battery Health Estimation & Optimization Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%);
+            min-height: 100vh;
+            padding: 24px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        
+        /* Header */
+        .header {
+            background: linear-gradient(to right, #2563eb, #9333ea);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 24px;
+            color: white;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3);
+        }
+        .header-title { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+        .header h1 { font-size: 36px; font-weight: bold; }
+        .header p { opacity: 0.9; margin-top: 8px; }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-top: 24px;
+        }
+        .metric-card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .metric-label { font-size: 14px; opacity: 0.9; }
+        .metric-value { font-size: 32px; font-weight: bold; margin-top: 4px; }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+        .tab {
+            flex: 1;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .tab.active { color: white; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2); }
+        .tab:not(.active) { background: white; color: #334155; }
+        .tab:not(.active):hover { background: #f1f5f9; }
+        .tab-1.active { background: #2563eb; }
+        .tab-2.active { background: #9333ea; }
+        .tab-3.active { background: #16a34a; }
+        
+        /* Content */
+        .content {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2);
+            display: none;
+        }
+        .content.active { display: block; }
+        
+        .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .content h2 { font-size: 24px; font-weight: bold; }
+        
+        .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: white;
+        }
+        .btn-primary { background: #2563eb; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-secondary { background: #9333ea; }
+        .btn-secondary:hover { background: #7e22ce; }
+        .btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+        
+        /* Health Indicators */
+        .indicators {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .indicator {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 16px;
+            border: 2px solid #e2e8f0;
+        }
+        .indicator-label { font-size: 14px; font-weight: bold; color: #64748b; }
+        .indicator-value { font-size: 24px; font-weight: bold; margin-top: 4px; }
+        
+        /* Chart */
+        .chart-container {
+            height: 400px;
+            margin-bottom: 24px;
+        }
+        
+        /* Info Box */
+        .info-box {
+            padding: 16px;
+            border-radius: 4px;
+            margin-top: 24px;
+        }
+        .info-box-blue { background: #dbeafe; border-left: 4px solid #2563eb; }
+        .info-box-purple { background: #f3e8ff; border-left: 4px solid #9333ea; }
+        .info-box-green { background: #dcfce7; border-left: 4px solid #16a34a; }
+        .info-box h4 { font-weight: bold; margin-bottom: 8px; }
+        .info-box p { font-size: 14px; }
+        
+        /* RL Metrics */
+        .rl-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        .rl-metric {
+            border-radius: 8px;
+            padding: 24px;
+            border: 2px solid;
+        }
+        .rl-metric-green {
+            background: linear-gradient(to bottom right, #dcfce7, #bbf7d0);
+            border-color: #86efac;
+        }
+        .rl-metric-blue {
+            background: linear-gradient(to bottom right, #dbeafe, #bfdbfe);
+            border-color: #93c5fd;
+        }
+        .rl-metric-purple {
+            background: linear-gradient(to bottom right, #f3e8ff, #e9d5ff);
+            border-color: #d8b4fe;
+        }
+        
+        /* Model Cards */
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+        .model-card {
+            background: linear-gradient(to bottom right, #f8fafc, #f1f5f9);
+            border-radius: 8px;
+            padding: 24px;
+            border: 2px solid #cbd5e1;
+        }
+        .model-card h3 { font-size: 20px; font-weight: bold; margin-bottom: 16px; }
+        .model-metric { margin-bottom: 16px; }
+        .model-metric-label { font-size: 14px; color: #64748b; }
+        .model-metric-value { font-size: 28px; font-weight: bold; margin-top: 4px; }
+        .model-ref { font-size: 12px; color: #64748b; font-style: italic; margin-top: 16px; }
+        
+        /* Footer */
+        .footer {
+            margin-top: 24px;
+            background: #1e293b;
+            border-radius: 16px;
+            padding: 24px;
+            color: white;
+        }
+        .footer p { font-size: 14px; margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-title">
+                <span style="font-size: 48px;">🔋</span>
+                <div>
+                    <h1>Battery Health Estimation & Optimization</h1>
+                    <p>Real-time ML-Powered Battery Management System Demo</p>
+                </div>
+            </div>
+            <div class="metrics">
+                <div class="metric-card">
+                    <div class="metric-label">Current SOH</div>
+                    <div class="metric-value" id="soh-display">100.0%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Current SOC</div>
+                    <div class="metric-value" id="soc-display">80%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Model Accuracy</div>
+                    <div class="metric-value" id="accuracy-display">0.0%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab tab-1 active" onclick="switchTab(1)">SOH/SOC Estimation</button>
+            <button class="tab tab-2" onclick="switchTab(2)">RL Optimization</button>
+            <button class="tab tab-3" onclick="switchTab(3)">Model Comparison</button>
+        </div>
+
+        <!-- Tab 1: Estimation -->
+        <div class="content active" id="tab1">
+            <div class="content-header">
+                <h2>CNN-Based State of Health Estimation</h2>
+                <button class="btn btn-primary" id="runEstimation" onclick="runEstimation()">▶ Run Estimation</button>
+            </div>
+
+            <div class="indicators">
+                <div class="indicator">
+                    <div class="indicator-label">⚡ Voltage</div>
+                    <div class="indicator-value">3.85V</div>
+                </div>
+                <div class="indicator">
+                    <div class="indicator-label">🌡️ Temperature</div>
+                    <div class="indicator-value">28°C</div>
+                </div>
+                <div class="indicator">
+                    <div class="indicator-label">📊 Current</div>
+                    <div class="indicator-value">2.1A</div>
+                </div>
+                <div class="indicator">
+                    <div class="indicator-label">🔋 Cycles</div>
+                    <div class="indicator-value" id="cycle-display">0</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="estimationChart"></canvas>
+            </div>
+
+            <div class="info-box info-box-blue">
+                <h4 style="color: #1e3a8a;">📊 Model Performance</h4>
+                <p style="color: #1e40af;">
+                    Using CNN with transfer learning on NASA battery dataset. Current MAPE: <strong>3.89 mAh</strong> | 
+                    RMSE: <strong>4.79 mAh</strong> | Training on 222 LFP batteries with 146,074 cycles (Zhao et al. 2025)
+                </p>
+            </div>
+        </div>
+
+        <!-- Tab 2: Optimization -->
+        <div class="content" id="tab2">
+            <div class="content-header">
+                <h2>Reinforcement Learning Optimization</h2>
+                <button class="btn btn-secondary" id="runRL" onclick="runRL()">▶ Run RL Agent</button>
+            </div>
+
+            <div class="rl-metrics">
+                <div class="rl-metric rl-metric-green">
+                    <div class="indicator-label" style="color: #15803d;">Reward Score</div>
+                    <div class="indicator-value" style="color: #166534;" id="reward-display">0.0</div>
+                    <p style="font-size: 12px; color: #16a34a; margin-top: 8px;">Higher is better</p>
+                </div>
+                <div class="rl-metric rl-metric-blue">
+                    <div class="indicator-label" style="color: #1e40af;">Energy Efficiency</div>
+                    <div class="indicator-value" style="color: #1e3a8a;" id="efficiency-display">85.0%</div>
+                    <p style="font-size: 12px; color: #2563eb; margin-top: 8px;" id="efficiency-delta">+0.0% improvement</p>
+                </div>
+                <div class="rl-metric rl-metric-purple">
+                    <div class="indicator-label" style="color: #7e22ce;">Lifespan Extension</div>
+                    <div class="indicator-value" style="color: #6b21a8;" id="lifespan-display">+0.0%</div>
+                    <p style="font-size: 12px; color: #9333ea; margin-top: 8px;">vs standard charging</p>
+                </div>
+            </div>
+
+            <div style="background: #f8fafc; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
+                <h3 style="font-size: 18px; font-weight: bold; margin-bottom: 16px; color: #1e293b;">⚙️ Charging Strategy Selection</h3>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                    <button class="strategy-btn" id="strategy-standard" onclick="selectStrategy('standard')" style="padding: 16px; border-radius: 8px; border: 2px solid #cbd5e1; background: white; cursor: pointer; transition: all 0.3s;">
+                        <div style="font-weight: bold; color: #1e293b; margin-bottom: 8px;">Standard Charging</div>
+                        <div style="font-size: 12px; color: #64748b;">0.5C rate, 80% max SOC</div>
+                    </button>
+                    <button class="strategy-btn" id="strategy-fast" onclick="selectStrategy('fast')" style="padding: 16px; border-radius: 8px; border: 2px solid #cbd5e1; background: white; cursor: pointer; transition: all 0.3s;">
+                        <div style="font-weight: bold; color: #1e293b; margin-bottom: 8px;">Fast Charging</div>
+                        <div style="font-size: 12px; color: #64748b;">2C rate, full charge</div>
+                    </button>
+                    <button class="strategy-btn" id="strategy-optimal" onclick="selectStrategy('optimal')" style="padding: 16px; border-radius: 8px; border: 2px solid #cbd5e1; background: white; cursor: pointer; transition: all 0.3s;">
+                        <div style="font-weight: bold; color: #1e293b; margin-bottom: 8px;">Optimal (RL)</div>
+                        <div style="font-size: 12px; color: #64748b;">RL-optimized adaptive</div>
+                    </button>
+                </div>
+                <div id="strategy-info" style="margin-top: 16px; padding: 12px; background: #dbeafe; border-left: 4px solid #2563eb; border-radius: 4px; display: none;">
+                    <p style="font-size: 14px; color: #1e40af; margin: 0;"><strong>Selected:</strong> <span id="strategy-name">None</span></p>
+                </div>
+            </div>
+
+            <div class="info-box info-box-purple">
+                <h4 style="color: #6b21a8;">🤖 RL Algorithm: Deep Q-Learning + Actor-Critic</h4>
+                <p style="color: #7e22ce;">
+                    State: [SOC, SOH, Temperature, Voltage] | Action: [Charging Current, Voltage Limit] | 
+                    Reward: Balance of efficiency, battery health, and user constraints (Yalçın & Herdem, 2024)
+                </p>
+            </div>
+        </div>
+
+        <!-- Tab 3: Models -->
+        <div class="content" id="tab3">
+            <h2 style="margin-bottom: 24px;">Machine Learning Models Comparison</h2>
+            
+            <div class="model-grid">
+                <div class="model-card">
+                    <h3>CNN</h3>
+                    <div class="model-metric">
+                        <div class="model-metric-label">Accuracy</div>
+                        <div class="model-metric-value" style="color: #16a34a;">96.11%</div>
+                    </div>
+                    <div class="model-metric">
+                        <div class="model-metric-label">MAPE</div>
+                        <div class="model-metric-value" style="color: #2563eb;">3.89 mAh</div>
+                    </div>
+                    <div class="model-ref">Reference: Zhao et al. 2025</div>
+                </div>
+
+                <div class="model-card">
+                    <h3>LSTM</h3>
+                    <div class="model-metric">
+                        <div class="model-metric-label">Accuracy</div>
+                        <div class="model-metric-value" style="color: #16a34a;">94.5%</div>
+                    </div>
+                    <div class="model-metric">
+                        <div class="model-metric-label">MAPE</div>
+                        <div class="model-metric-value" style="color: #2563eb;">5.2 mAh</div>
+                    </div>
+                    <div class="model-ref">Reference: Haraz et al. 2024</div>
+                </div>
+
+                <div class="model-card">
+                    <h3>Hybrid CNN-LSTM</h3>
+                    <div class="model-metric">
+                        <div class="model-metric-label">Accuracy</div>
+                        <div class="model-metric-value" style="color: #16a34a;">95.8%</div>
+                    </div>
+                    <div class="model-metric">
+                        <div class="model-metric-label">MAPE</div>
+                        <div class="model-metric-value" style="color: #2563eb;">4.1 mAh</div>
+                    </div>
+                    <div class="model-ref">Reference: Proposed</div>
+                </div>
+
+                <div class="model-card">
+                    <h3>Q-Learning (RL)</h3>
+                    <div class="model-metric">
+                        <div class="model-metric-label">Energy Efficiency</div>
+                        <div class="model-metric-value" style="color: #16a34a;">+15%</div>
+                    </div>
+                    <div class="model-metric">
+                        <div class="model-metric-label">Lifespan Extension</div>
+                        <div class="model-metric-value" style="color: #9333ea;">+20%</div>
+                    </div>
+                    <div class="model-ref">Reference: Suanpang 2024</div>
+                </div>
+            </div>
+
+            <div class="info-box info-box-green" style="margin-top: 24px;">
+                <h4 style="color: #166534;">✅ Best Approach: Hybrid CNN-LSTM with Transfer Learning</h4>
+                <p style="color: #15803d;">
+                    CNN extracts spatial features from voltage curves, LSTM captures temporal dependencies. 
+                    Transfer learning enables cross-battery generalization. Combined with RL optimization for complete BMS solution.
+                </p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>Project:</strong> On-Time Battery Health Estimation and Optimization in Electric Vehicles</p>
+            <p><strong>Team:</strong> Md. Shiban Alam, Syed Sarafeena Ali, Purbasha Roy, Oindrila Sain | <strong>Mentor:</strong> Ms. Amrita Bhattacharya</p>
+        </div>
+    </div>
+
+    <script>
+        let chart = null;
+        let isRunning = false;
+
+        function switchTab(tabNum) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach((tab, idx) => {
+                tab.classList.toggle('active', idx + 1 === tabNum);
+            });
+            
+            // Update content
+            document.querySelectorAll('.content').forEach((content, idx) => {
+                content.classList.toggle('active', idx + 1 === tabNum);
+            });
+        }
+
+        function runEstimation() {
+            if (isRunning) return;
+            isRunning = true;
+            document.getElementById('runEstimation').disabled = true;
+            document.getElementById('runEstimation').textContent = '▶ Running...';
+
+            // Generate data
+            const cycles = [];
+            const actualSOH = [];
+            const predictedSOH = [];
+            
+            for (let i = 0; i <= 100; i++) {
+                cycles.push(i);
+                const soh = Math.max(75, 100 - (i * 0.2) - (Math.random() * 2));
+                actualSOH.push(soh);
+                predictedSOH.push(Math.max(75, soh + (Math.random() * 4 - 2)));
+            }
+
+            // Create chart
+            const ctx = document.getElementById('estimationChart').getContext('2d');
+            if (chart) chart.destroy();
+            
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: cycles,
+                    datasets: [{
+                        label: 'Actual SOH',
+                        data: actualSOH,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4
+                    }, {
+                        label: 'Predicted SOH (CNN)',
+                        data: predictedSOH,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 3,
+                        borderDash: [5, 5],
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        title: {
+                            display: true,
+                            text: 'Battery State of Health Over Charge Cycles'
+                        }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: 'Charge Cycles' } },
+                        y: { 
+                            title: { display: true, text: 'SOH (%)' },
+                            min: 70,
+                            max: 105
+                        }
+                    }
+                }
+            });
+
+            // Animate
+            let i = 0;
+            const interval = setInterval(() => {
+                i++;
+                document.getElementById('cycle-display').textContent = i;
+                document.getElementById('soh-display').textContent = actualSOH[i].toFixed(1) + '%';
+                document.getElementById('accuracy-display').textContent = Math.min(97.5, 50 + i * 0.5).toFixed(1) + '%';
+
+                if (i >= 100) {
+                    clearInterval(interval);
+                    isRunning = false;
+                    document.getElementById('runEstimation').disabled = false;
+                    document.getElementById('runEstimation').textContent = '▶ Run Estimation';
+                }
+            }, 50);
+        }
+
+        let selectedStrategy = null;
+
+        function selectStrategy(strategy) {
+            selectedStrategy = strategy;
+            
+            // Update button styles
+            document.querySelectorAll('.strategy-btn').forEach(btn => {
+                btn.style.border = '2px solid #cbd5e1';
+                btn.style.background = 'white';
+            });
+            
+            const btn = document.getElementById('strategy-' + strategy);
+            btn.style.border = '2px solid #9333ea';
+            btn.style.background = '#f3e8ff';
+            
+            // Show info
+            const infoBox = document.getElementById('strategy-info');
+            const strategyName = document.getElementById('strategy-name');
+            const strategyNames = {
+                'standard': 'Standard Charging (0.5C, conservative)',
+                'fast': 'Fast Charging (2C, quick but degrades faster)',
+                'optimal': 'Optimal RL-based (adaptive, best for longevity)'
+            };
+            strategyName.textContent = strategyNames[strategy];
+            infoBox.style.display = 'block';
+        }
+
+        function runRL() {
+            if (isRunning) return;
+            isRunning = true;
+            document.getElementById('runRL').disabled = true;
+            document.getElementById('runRL').textContent = '▶ Optimizing...';
+
+            let reward = 0;
+            let efficiency = 85;
+            let lifespan = 0;
+
+            // Strategy affects the optimization results
+            const strategyMultipliers = {
+                'standard': { reward: 0.8, efficiency: 0.9, lifespan: 0.85 },
+                'fast': { reward: 0.6, efficiency: 0.7, lifespan: 0.5 },
+                'optimal': { reward: 1.2, efficiency: 1.1, lifespan: 1.3 },
+                null: { reward: 1.0, efficiency: 1.0, lifespan: 1.0 }
+            };
+            
+            const multiplier = strategyMultipliers[selectedStrategy] || strategyMultipliers[null];
+
+            const interval = setInterval(() => {
+                reward += Math.random() * 5 * multiplier.reward;
+                efficiency = Math.min(100, efficiency + Math.random() * 0.5 * multiplier.efficiency);
+                lifespan = Math.min(25, lifespan + Math.random() * 0.3 * multiplier.lifespan);
+
+                document.getElementById('reward-display').textContent = reward.toFixed(1);
+                document.getElementById('efficiency-display').textContent = efficiency.toFixed(1) + '%';
+                document.getElementById('efficiency-delta').textContent = '+' + (efficiency - 85).toFixed(1) + '% improvement';
+                document.getElementById('lifespan-display').textContent = '+' + lifespan.toFixed(1) + '%';
+
+                if (reward >= 100) {
+                    clearInterval(interval);
+                    isRunning = false;
+                    document.getElementById('runRL').disabled = false;
+                    document.getElementById('runRL').textContent = '▶ Run RL Agent';
+                }
+            }, 100);
+        }
+    </script>
+</body>
+</html>
